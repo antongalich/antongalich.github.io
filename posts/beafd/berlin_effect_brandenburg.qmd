@@ -1,0 +1,118 @@
+---
+title: "The Berlin Effect on AfD votes in Brandenburg"
+date: "2024-09-15"
+categories: [berlin, politics, cycling]
+---
+
+## Background: Living in Berlin, cycling through Brandenburg
+
+Like many people in Berlin, I really enjoy occassional daytrips for hiking and cycling in Brandenburg. Tranquil lakes and forests as well as cozy cafés help me to recharge my batteries and provide a nice breakout from sometimes hectic city life. This was also our intention when me and my girlfriend went on a bicycle trip in August 2024, just between two political elections: The elections for the European Parliament in June 2024 and the elections for the Parliament of the Federal State of Brandenburg in September 2024.
+
+Not surprisingly, many streets along our way were cluttered with elections posters from different parties. More surprisingly, however, was our observation that the posters seemed to change along the way. In particular, it struck us that the share of posters that were set up by the AfD ("Alternative für Deutschland", a ring-wing populist and national-conservative party in Germany) increased the farther away we got from Berlin. Actually, towards the end of our bike trip we passed through some villages at the western edges of Brandenburg were the AfD was the only political party that had set up any elections posters.
+
+This made us wonder: Is it generally the case that people living in Berlin's surrounding countryside vote less often for the AfD than people living more faraway areas of Brandenburg? After all, people living in big cities usually vote less often for ring-wing, nationalist parties than people living in rural areas. Hence also people living close to big cities might vote less often for ring-wing, nationalist parties than people living farther away from big cities. In addition, many people moved out of Berlin in the past two decades to a larger property in Brandenburg within commuting distance. Thus, a higher share of liberal Ex-Berliners in Berlin's surrounding countryside might also provide an explanation for less AfD posters in these communities.
+
+But enough speculation, let's get to the data to see whether there is any empirical evidence supporting these train of thoughts.
+
+## Data: Getting election results and municipality borders
+
+In order to investigate the potential relationship between the share of AfD votes in Brandenburg and the distance to Berlin, we will use two main sources of data:
+
+1.  The final results of the election for the European Parliament in 2024
+2.  The borders of the municipalities in Brandenburg
+
+The entire R-Code with all the packages needed for the data processing and the analyses can be found on Github. The first step, after installing and loading the required packages, is to retrieve the election results. You can get them on a [website](https://wahlergebnisse.brandenburg.de/12/100/20240609/europawahl_land/) of the Federal State of Brandenburg.
+
+```{r package installation, echo=FALSE, include=FALSE}
+# loading the packages required
+packagename<-c("readxl","sf","ggplot2","mapview","RColorBrewer")
+if (length(setdiff(packagename, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packagename, rownames(installed.packages())),repos = "https://cran.uni-muenster.de/", Ncpus = 16)  
+}
+
+lapply(packagename, require, character.only = T)
+rm(packagename)
+
+
+# increasing the java heap space
+rm(list = ls())
+options(java.parameters = "-Xmx24g")
+```
+
+```{r downloading and reading the results of the elections for the european parliament in 2024, echo=FALSE, include=FALSE}
+temp = tempfile(fileext = ".xlsx")
+dataURL <- "https://wahlergebnisse.brandenburg.de/12/100/20240609/europawahl_land/DL/DL_BB_2_EU2024.xlsx"
+download.file(dataURL, destfile=temp, mode='wb')
+```
+
+Let's load the data and take a look at it. The column "Gebietsart" is relevant because it allows us to select the election results on different administrative levels. The smallest administrative level available is the municipality ("Gemeinde") which is what we go for.
+
+```{r loading the data, echo=FALSE, include=FALSE}
+elec_data <- readxl::read_excel(temp, sheet=3)
+head(elec_data)
+```
+
+```{r selection of the election results on the municipality level, echo=FALSE, include=FALSE}
+elec_data<-elec_data[elec_data$Gebietsart=="Gemeinde", ]
+```
+
+The borders of the municipalities in Brandenburg can be accessed free of charge and without registration on the website [Geobroker](https://geobroker.geobasis-bb.de/). You can save them locally and then load them into memory.
+
+```{r read in the geodata, echo=FALSE, include=FALSE}
+pathtodata<-paste0(getwd(),"/data")
+mun_geo<-read_sf(paste0(pathtodata,"/GRENZE_152811-5683624_gemeinden.shp"))
+```
+
+Then we added the share of votes for the AfD for each municipality to the geo-referenced municipality borders and we set the coordinate system of the municipalities to "EPSG:25833". This allows us to plot the election results per municipality on a map:
+
+```{r merging, echo=FALSE, include=FALSE}
+elec_data$ars<-elec_data$Nummer
+elec_data$afd_share<-elec_data$`AfD Prozent`
+mun_geo<-merge(mun_geo,elec_data[,c("ars","afd_share")], by="ars")
+mun_geo_crs<-st_set_crs(mun_geo,'+init=EPSG:25833')
+```
+
+```{r plotting the share of votes, echo=FALSE, include=TRUE}
+mapview(mun_geo_crs, zcol="afd_share", col.region=colorRampPalette(brewer.pal(9, "Blues")), layer.name = "Share of AfD votes in percent")
+```
+
+Each municipality is filled with some tone of blue. The darker the blue, the higher the share of votes for the AfD in the municipality. You can zoom in and out of the map to get a better view of the results and hovering the mouse pointer over a municipality gives you the actual share of votes for the AfD in that municipality. Already the inspection of the map by mere eye seems to confirm that the share of votes for the AfD and the proximity of a municipality to Berlin might be related. Thus, the impression that we got on our bike trip in Brandenburg was probably not completely out of the blue. But let's calculate a few more numbers before making preliminary conclusions.
+
+## Analysis: Shares of votes and distance to Berlin
+
+We once more use the website [Geobroker](https://geobroker.geobasis-bb.de/) to download the geo-referenced borders of the city (and municipality) of Berlin and to set their coordinate system to "EPSG: 25833". Then we calculate the distance (as the crow flies) from the centroid of each of the municipalities in Brandenburg to the centroid of Berlin.
+
+```{r berlin data, echo=FALSE, include=FALSE}
+mun_ber_geo<-read_sf(paste0(pathtodata,"/GRENZE_152811-5683624_berlingrenze.shp"))
+mun_ber_geo_crs<-st_set_crs(mun_ber_geo[1,],'+init=EPSG:25833')
+```
+
+```{r calculating the distances, echo=FALSE, include=FALSE}
+mun_geo_crs$cent<-st_centroid(mun_geo_crs)["geometry"]
+mun_geo_crs$dist_ber<-as.numeric(st_distance(mun_geo_crs$cent,st_centroid(mun_ber_geo_crs)["geometry"])[,1])
+```
+
+This allows us to calculate Pearson's correlation coefficient between the share of votes for the AfD in a municipalities and the distance of the municipality's centroid to the centroid of Berlin:
+
+```{r calculating the correlation, echo=FALSE, include=TRUE}
+cor(mun_geo_crs$afd_share,mun_geo_crs$dist_ber)
+```
+
+A correlation coefficient of 0.57 is quite high indicating that there is a statistical relationship between the share of votes for the AfD in a municipality and the municipality's distance to Berlin. The farther away a municipality from Berlin, the higher the share of votes for the AfD in the elections for the European Parliament in 2024.
+
+We can also illustrate this relationship by plotting a linear regression line:
+
+```{r plotting, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(mun_geo_crs, aes(x=dist_ber, y=afd_share)) + geom_point(color="blue") + geom_smooth(method = "lm", color="red") +
+  labs(title="Share of AfD votes by distance to Berlin",
+       x="Distance to Berlin in metres\n(centroid to centroid)", y = "Share of AfD votes in percent") + theme_classic() +
+  xlim(0,max(mun_geo_crs$dist_ber)+10) + ylim(0,100)
+```
+
+Each blue dot stands for a municipality in Brandenburg and indicates its distance to Berlin on the x-axis and its share of votes for the AfD on the y-axis. The distribution of the dots as well as the red regression line, clearly show that the share of votes for the AfD increases as the distance of the municipalities to Berlin increases.
+
+## Conclusion: Political impressions from a fine bike ride
+
+The analysis has shown a clear statistical relationship between the share of votes for the AfD in a municipality and the municipality's distance to Berlin. This could be due to Ex-Berliners who moved out of Berlin to a larger property in Brandenburg within commuting distance to Berlin. However, other explanations are possible as well. Municipalities closer to Berlin might be economically better off than rural areas far away from Berlin and economically better off areas usually have a lower share of votes for the AfD, irrespective of the number of Ex-Berliners living there.
+
+In any case, this article has shown how a fine bike ride in Brandenburg can inspire data analyses. If you would like to take the same bike ride, you can retrieve the GPX track on [Komoot](https://www.komoot.com/de-de/tour/1774621452?share_token=aaqkGAx0CTxTZg5qhndoWaBBLTXfTbKjm7n81qxq8KxHdVxwOe&ref=wtd). I am curious to hear what it inspired you to do afterwards!

@@ -1,0 +1,11 @@
+---
+title: "About"
+---
+
+This blog is exactly about what its title suggests: Getting the numbers right. What does this mean, you may wonder? Well, it could for example mean to contrast subjective impressions on a certain issue with insights from a broader data basis as in this [entry](./posts/beafd/berlin_effect_brandenburg.qmd). It could, however, also mean to evaluate the best hyper-parameters for an AI model. It could basically mean anything where it is important to determine the right numbers.
+
+The reason is that data and IT are my passion. It is my deepest conviction that the exponentially increasing amount of data being collected every day constitutes a treasure of inconceivable value. It just has to be used in the right way which often is not happening for two reasons. First, many people do not know of a certain data source although it might be very useful to them. This is simply due to the vast amount of data being collected that no single human being can oversee. Second, many people do not know how to extract the required information from one or multiple sources of data.
+
+Against this background, the main purpose of this blog is to share my knowledge and hopefully being an inspiration to others on what data sources are out there and how to use them. If you have questions, comments, or want to know more, please feel free to [contact](./contact.qmd) me.
+
+All the code used for this blog is public and available on [Github](https://github.com/antongalich).

@@ -1,0 +1,308 @@
+---
+title: "The most volatile stocks in 2025"
+date: "2026-02-20"
+categories: [finance, volatility]
+---
+
+## Stock market volatility
+
+A volatile stock market provides a lot of opportunities. In the ideal case a trader can several times buy a specific stock at a low price and sell it at a much higher price. Therefore, I was for voalitily measures and applications that can help me finding the most volatile stocks. Surprisingly, I did not find much. Of course, there are a lot of websites listing stock charts etc. but I did not find any that explicitly shows volatility measures. In particular, I did not find any that allow you to identify the 5, 10 or however many most volatile stocks in the last 3 months, the last year or in whatever period of time. Thus, I set out to develop something on my own.
+
+```{r package installation, echo=FALSE, include=FALSE}
+# loading the packages required
+packagename<-c("quantmod","ggplot2")
+if (length(setdiff(packagename, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packagename, rownames(installed.packages())),repos = "https://cran.uni-muenster.de/", Ncpus = 16)  
+}
+
+lapply(packagename, require, character.only = T)
+rm(packagename)
+
+
+# increasing the java heap space
+rm(list = ls())
+options(java.parameters = "-Xmx24g")
+```
+
+## Measuring volatility
+
+My ambition was to develop a tool that easily allows me to identify the most volatile stocks for any period in time. First, I had to think of how to measure volatility. As I am interested in buying stocks when their price is low, I decided to set the average low of a specific stock as my starting point. By average low I mean that I would calculate the mean of the lowest price of a specific stock of each day in a certain period in time. Then I am interested in how often the price of that stock rises above that average low in the defined period in time. However, as I am interested in volatility, I not only need the stock price to rise a certain number of times above the average low but also to fall the same number of times to at least the amount of the average low.
+
+If a stock price is to rise three times a to an amount double as high as the average low, it also needs to sink three times to at least the average low. Thus the patterns we are looking for should look something like this:
+
+```{r echo=FALSE, include=FALSE}
+# data preparation for the volatility example
+lo<-c(1,0.5,0.8,0.9,0.2,0.001,0.01,0.04,0.05,0.1,0.6,0.5,0.9,1.2,1.3,2.5,3.2,3.3,3.1,2.2,1.8,1.2,1,0.1,0.2,0.3,0.1,0.2,0.6,0.9,1.1,1.4,0.5,0.9,0.6,
+                   0.3,0.23,0.3,1.2,1.6,1.9,1.4,2.1,2.6,2.9,2.7,2.8,3.1,2.8,2.6,3,3.2,3.3,3.1,2.9,3,3.1,2.8,2.3,2.1,2.3,1.8,0.9,0.01,0.1,0.0001,0.11,0.002,
+                   0.003,0.02,0.04,0.02,0.04,0.002,0.003,0.001,0.0023,0.0001,0.002,0.004,0.02,0.001,0.003,0.04,0.03,0.01,0.1,0.3,0.2,0.5,0.6,0.4,0.7,0.8,0.3,
+                   0.4,0.02,0.002,0.023,0.005,0.0014,0.003,0.05,0.01,0.02,0.003,0.003,0,002,0.003,0.2139,0.04,0.03,0.04,0.06,0.4,0.06,0.7,0.8,1,0.9,0.85,0.7,
+                   0.956,0.8,0.7,0.67,0.8,0.89,0.95,1.4,0.9,1.2,1.4,1.6,1.8,2.1,2.4,2.6,2.3,2.4,2.7,2.8,3.1,2.9,2.5,3.4,4.5,5.1,3.4,2.8,2.3,1.4,0.9,0.01,0.30,
+                   0.2,0.023,0.3,0.4,0.1,0.3,0.01,0.02,0.0001,0.2,0.003,0.1,0.003,0.005,0.0001,0.002,0.003,0.023)
+set.seed(3)
+hi<-lo+runif(length(lo),2.5,3.5)
+ve<-data.frame(x=lo,y=(rep(1,174)),hi=hi)
+
+sdt<-as.Date("2025-02-03")
+for (i in 1:173){
+  sdt[i+1]<-sdt+i
+}
+
+cols <- c("Daily high"="blue","Daily low"="red")
+```
+
+```{r volatility example, warning=FALSE, echo=FALSE, include=TRUE, fig.width=10, fig.asp = 0.618}
+
+ggplot2::ggplot(data = ve, ggplot2::aes(x=sdt)) + ggplot2::geom_line(ggplot2::aes(y=x, colour="Daily low")) + ggplot2::geom_line(ggplot2::aes(y=mean(x)), col="red", linetype = "dashed") + 
+  ggplot2::geom_line(ggplot2::aes(y=6), col="darkgreen", linetype = "dashed") +
+  ggplot2::geom_line(ggplot2::aes(y=hi, colour="Daily high")) +
+  ggplot2::labs(title="Volatility example - Stock price per date", x="\nDate", y="Stock price\n") + 
+  ggplot2::theme_minimal() + 
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5), legend.text = 
+                   ggplot2::element_text(size=10)) +
+  ggplot2::scale_x_date(date_breaks  ="1 months",limits = as.Date(c("2025-02-01","2025-07-31"))) +
+  ggplot2::annotate(geom="text", x=as.Date("2025-07-20"), y=6,
+                    label="Defined\nthreshold", col="darkgreen", size=4)+
+  ggplot2::annotate(geom="text", x=as.Date("2025-07-20"), y=1,
+                    label="Average\nlow", col="red", size=4) +
+  ggplot2::annotate(geom="text", x=as.Date("2025-03-07"), y=7.5,
+                    label="Volatility\ncriteria\nfulfilled", col="darkgrey", size=5) + 
+  ggplot2::scale_colour_manual(name="Legend",values=cols) + 
+  ggplot2::geom_vline(xintercept = as.Date("2025-02-25"), linetype="dashed",col="grey", size =1.2) + 
+  ggplot2::geom_vline(xintercept = as.Date("2025-04-06"), linetype="dashed",col="grey", size =1.2) +
+  ggplot2::geom_vline(xintercept = as.Date("2025-07-06"), linetype="dashed",col="grey", size =1.2)
+
+
+```
+
+Given a specific period of time (such as the 1st of February to the 26th of July 2025 in the example above), we can calculate the average low as the mean of the lowest stock price of each day. In the figure above, the average low is exactly 1 and is illustrated by the dashed horizontal red line. If we say that we want the stock price to be higher than the average low by at least the factor of 6, then we arrive at the threshold indicated by the dashed horizontal blue line with a value of exactly 6. The dashed vertical grey lines indicate that the stock price has 3 times risen above our defined threshold and fallen to at least the average low in the period of time illustrated.
+
+Thus, we have identified three factors that need to be specified in order to measure volatility:
+
+-   Period of time (start date and end date)
+
+-   Dimension of increase (the factor by which we want the stock price to rise above the average low)
+
+-   Average low (the mean of the lowest stock price of each day in the chosen period of time)
+
+However, some the values of certain stocks might be extremely volatile and fulfill our criteria multiple times within a single trading day, while the price of other stocks might rise above the average low by our defined factor and then remain at a high level for months or years. Therefore, we need to consider two further aspects in order to capture volatility on the stock market: The number of days on which the price of a stock remains at a high level and the number of days on which the price remains at a relatively low level.
+
+## The temporal dimension
+
+Thus, to grasp the temporal dimension in stock market volatility, it is important to demarcate the beginning and the end of periods in time with a relatively high and a relatively low stock price. Furthermore, it is important to decide how long a period of a relatively high value is to be and how much time there is to be between two periods of a relatively high value. If we again take a look at our volatility example, we can see that there are three intervals of which each begins with the stock price exceeding the threshold defined by us and of which each ends with the stock price falling to at least the average low:
+
+```{r volatility intervals, echo=FALSE, include=TRUE, fig.width=10, fig.asp = 0.618}
+
+ggplot2::ggplot(data = ve, ggplot2::aes(x=sdt)) + ggplot2::geom_line(ggplot2::aes(y=x, colour="Daily low")) + ggplot2::geom_line(ggplot2::aes(y=mean(x)), col="red", linetype = "dashed") + 
+  ggplot2::geom_line(ggplot2::aes(y=6), col="darkgreen", linetype = "dashed") +
+  ggplot2::geom_line(ggplot2::aes(y=hi, colour="Daily high")) +
+  ggplot2::labs(title="Volatility interval example", x="\nDate", y="Stock price\n") + 
+  ggplot2::theme_minimal() + 
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5), legend.text = 
+                   ggplot2::element_text(size=10)) +
+  ggplot2::scale_x_date(date_breaks  ="1 months",limits = as.Date(c("2025-02-01","2025-07-31"))) +
+  ggplot2::annotate(geom="text", x=as.Date("2025-07-20"), y=6,
+                    label="Defined\nthreshold", col="darkgreen", size=4)+
+  ggplot2::annotate(geom="text", x=as.Date("2025-07-20"), y=1,
+                    label="Average\nlow", col="red", size=4) +
+  ggplot2::annotate(geom="text", x=as.Date("2025-03-07"), y=7.5,
+                    label="Peak\nintervals", col="darkgrey", size=5) + 
+  ggplot2::scale_colour_manual(name="Legend",values=cols) + 
+  ggplot2::geom_vline(xintercept = as.Date("2025-02-25"), linetype="dashed",col="grey", size =1.2) + 
+  ggplot2::geom_vline(xintercept = as.Date("2025-04-06"), linetype="dashed",col="grey", size =1.2) +
+  ggplot2::geom_vline(xintercept = as.Date("2025-07-06"), linetype="dashed",col="grey", size =1.2) +
+  ggplot2::geom_vline(xintercept = as.Date("2025-02-19"), linetype="dashed",col="grey", size =1.2) +
+  ggplot2::geom_vline(xintercept = as.Date("2025-03-26"), linetype="dashed",col="grey", size =1.2) +
+  ggplot2::geom_vline(xintercept = as.Date("2025-06-25"), linetype="dashed",col="grey", size =1.2) +
+  ggplot2::annotate("rect", xmin = as.Date("2025-02-19"), xmax = as.Date("2025-02-25"), ymin = 0, ymax = 8.5, 
+           alpha = .2) +
+  ggplot2::annotate("rect", xmin = as.Date("2025-03-26"), xmax = as.Date("2025-04-06"), ymin = 0, ymax = 8.5, 
+           alpha = .2) +
+  ggplot2::annotate("rect", xmin = as.Date("2025-06-25"), xmax = as.Date("2025-07-06"), ymin = 0, ymax = 8.5, 
+           alpha = .2)
+
+
+```
+
+As can be seen, the three intervals are of a different length and they last from 19-25 February, 26 March - 06 April, and from 25 June - 06 July 2025. Thus, the first interval encompasses 7 days, while the second and the last encompass 12 days. In addition, it is visible that the period in time between the three intervals differs in length. While there are 28 days between the first and the second interval, 79 days fall between the second and the third interval. These intervals can be termed peak intervals as they denote periods in time in which the stock price has at least once risen above the defined threshold.
+
+This example shows that there are three further factors that we have to specific if we want to capture the temporal dimension of volatility on the stock market:
+
+-   How often do we want the stock price to rise above a specified threshold (and to fall again at least to the average low) in a given period of time? In other words, how many volatility intervals do we want to have in that period of time?
+
+-   How many days should each of the peak intervals at least encompass?
+
+-   How many days do we want to be between each peak interval?
+
+These questions have to be answered to begin the search for stocks that satisfy the criteria defined.
+
+## Getting the data
+
+One option to get historic stock price data is Yahoo. The data can be accessed via the package quantmod for R. All the code that has been used for this blog article is as always available on Github. However, before we access the data, we have to specify all the factors identified above. I decided to proceed with the following specifications:
+
+-   Time period: 01.01.2025 - 31.12.2025
+
+-   Rise factor: 1
+
+-   Minimum number of peak intervals: 3
+
+-   Minimum number of days within a peak interval: 7
+
+-   Minimum number of days between two peak intervals: 7
+
+```{r criteria definition, echo=FALSE, include=FALSE}
+# define the start and the end date for the analysis in the format "year-month-day" (it has to be at least three days before the present date) 
+stdat<-"2024-12-31"
+endat<-"2026-01-01"
+
+
+# define the factor by which you want the stock to change at minimum (1 stands for 100% which effectively means double as much as the average low)
+fac<-1
+
+# set the average low to zero at the beginning 
+lowme<-0
+
+# minimum number of changes according to the defined factor
+minvol<-3
+
+# minimum number of days when the stock price is above the stock price defined by the factor without going below that value
+minday<-7
+  
+# minimum number of days between two periods of time in which the stock price is above the stock price defined by the factor 
+minbet<-7
+```
+
+These specifications imply that we will consider the daily high and the daily low of the price of each stock on each (trading) day of the year 2025. Based on this data, the average daily low of each stock will be calculated. A rise factor of 1 means that we will only consider stocks whose value rose by a factor of 1 above its average daily low. This effectively means that we will only look at stocks whose price rose to an amount double as high as its average low. In addition, we have specified that we are only looking for stocks whose value rose by a factor of 1 above its average daily low and sank again to its average daily low at least 3 times. Furthermore, these peak intervals have to encompass at least 7 days and also at least 7 days have to between two different peak intervals.
+
+After having specified all the necessary criteria, we can access and process the data.
+
+```{r accessing and processing the data, echo=FALSE, include=FALSE}
+# retrieve all stock acronyms
+sym<-stockSymbols()
+sym<-sym[,1]
+
+
+# progress bar to see the % of completion
+n <- length(sym)
+pb <- txtProgressBar(min = 0, max = n, style=3)
+
+dfl<-list()
+
+# Actual loop: 
+for(i in 1:length(sym)) {
+  tryCatch({sym[i]-> symbol
+  # specify the "from" date to desired start date
+  tryit <- try(getSymbols(symbol,from=stdat, to=endat, src='yahoo'))
+  if(inherits(tryit, "try-error")){
+    i <- i+1
+  } else {
+    # specify the "from" date to desired start date
+    data <- getSymbols(symbol, from=stdat, to=endat, src='yahoo')
+    dfl[[i]] <- data.frame(get(sym[i]), date = as.Date(rownames(data.frame(get(sym[i])))), stock = sym[i])
+    rm(symbol)
+    rm(list = sym[i])
+  }
+  setTxtProgressBar(pb, i)},
+  error = function(msg){
+    i <- i +1
+  })
+}
+
+
+# delete empty data frames
+dfl<-dfl[sapply(dfl, function(x) !is.null(nrow(x)))]
+
+
+# create a variable denoting the volatility intervals
+for (i in 1:length(dfl)) {
+  dfl[[i]]["interv"]<-0
+  dfl[[i]]<-dfl[[i]][is.na(dfl[[i]][colnames(dfl[[i]])[grepl("High",colnames(dfl[[i]]))]])==F&is.na(dfl[[i]][colnames(dfl[[i]])[grepl("Low",colnames(dfl[[i]]))]])==F,]
+}
+
+
+# identify all volatility intervals 
+for (i in 1:length(dfl)) {
+  if((max(dfl[[i]][1:nrow(dfl[[i]]),colnames(dfl[[i]])[grepl("High",colnames(dfl[[i]]))]], na.rm = T) -
+      mean(dfl[[i]][1:nrow(dfl[[i]]),colnames(dfl[[i]])[grepl("Low",colnames(dfl[[i]]))]], na.rm = T)) /
+      mean(dfl[[i]][1:nrow(dfl[[i]]),colnames(dfl[[i]])[grepl("Low",colnames(dfl[[i]]))]], na.rm = T) >= fac) {
+      lowme<-mean(dfl[[i]][1:nrow(dfl[[i]]),colnames(dfl[[i]])[grepl("Low",colnames(dfl[[i]]))]], na.rm = T)
+      
+        for (j in 1:nrow(dfl[[i]])) {
+          if(j==1){
+            dfl[[i]][j,"interv"]<-ifelse((dfl[[i]][j,colnames(dfl[[i]])[grepl("High",colnames(dfl[[i]]))]] - lowme) / lowme >= fac,-1,dfl[[i]][j,"interv"])
+          }
+          else {
+            if(dfl[[i]][j-1,"interv"]!=0) {
+              dfl[[i]][j,"interv"]<-ifelse((dfl[[i]][j,colnames(dfl[[i]])[grepl("High",colnames(dfl[[i]]))]] - lowme <=0) | 
+                                             (dfl[[i]][j,colnames(dfl[[i]])[grepl("Low",colnames(dfl[[i]]))]] - lowme <=0),0,dfl[[i]][j-1,"interv"])
+            }
+            else {
+              dfl[[i]][j,"interv"]<-ifelse((dfl[[i]][j,colnames(dfl[[i]])[grepl("High",colnames(dfl[[i]]))]] - lowme) / lowme >= fac,
+                                           max(dfl[[i]][1:nrow(dfl[[i]]),"interv"])+1,dfl[[i]][j,"interv"])
+            }
+          }
+    }
+  }
+}
+
+
+# identify the stocks that fulfill the defined criteria for the minimum number of volatility intervals and their length and the number of days between them
+dflsat<-list()
+n<-1
+for (i in 1:length(dfl)){
+  if(max(dfl[[i]][1:nrow(dfl[[i]]),"interv"]) >= minvol){
+    uniint<-unique(dfl[[i]][1:nrow(dfl[[i]]),"interv"])[unique(dfl[[i]][1:nrow(dfl[[i]]),"interv"])!=0]
+    mindayvec<-rep(0,length(unique(dfl[[i]][1:nrow(dfl[[i]]),"interv"])[unique(dfl[[i]][1:nrow(dfl[[i]]),"interv"])!=0]))
+    for (j in 1:length(mindayvec)){
+      mindayvec[j]<-ifelse(max(dfl[[i]][dfl[[i]][1:nrow(dfl[[i]]),"interv"]==uniint[j],"date"], na.rm = T)-
+                           min(dfl[[i]][dfl[[i]][1:nrow(dfl[[i]]),"interv"]==uniint[j],"date"], na.rm = T)>=minday,1,0)
+    }
+    minbetvec<-rep(0,length(unique(dfl[[i]][1:nrow(dfl[[i]]),"interv"])[unique(dfl[[i]][1:nrow(dfl[[i]]),"interv"])!=0]))
+    for (j in 1:length(minbetvec)){
+      minbetvec[j]<-ifelse(j==1&min(dfl[[i]][dfl[[i]][1:nrow(dfl[[i]]),"interv"]==uniint[j],"date"], na.rm = T)-
+                             min(dfl[[i]][,"date"], na.rm = T)>=minbet,1,
+                           ifelse(j>1&min(dfl[[i]][dfl[[i]][1:nrow(dfl[[i]]),"interv"]==uniint[j],"date"], na.rm = T)-
+                                    max(dfl[[i]][dfl[[i]][1:nrow(dfl[[i]]),"interv"]==uniint[j-1],"date"], na.rm = T)>=minbet,1,0))
+    }    
+    if(sum(mindayvec)>=minvol&sum(minbetvec)>=minvol){
+      dflsat[[n]]<-dfl[[i]]
+      n<-n+1
+    }
+  }
+}
+
+rm(i,i,j,uniint,mindayvec,minbetvec)
+```
+
+## The most volatile stocks in 2025
+
+Finally, we can print to most volatile stocks in 2025 according to our criteria:
+
+```{r most volatile stocks, echo=FALSE, include=TRUE}
+
+# print the identified volatile stocks
+for (i in 1:length(dflsat)){
+  print(strsplit(colnames(dflsat[[i]])[grepl("Low",colnames(dflsat[[i]]))],"[.]")[[1]][1])
+}
+```
+
+Thus, 9 stocks fulfill our criteria of at least 3 peak intervals of which each lasted for at least 7 seven with at least 7 days between 2 peak intervals. We can also plot the daily high and daily low of the prices of these stocks to visually inspect if our code worked as we wanted it to.
+
+```{r plotting the most volatile stocks, echo=FALSE, include=TRUE}
+for (i in 1:length(dflsat)) {
+print(ggplot2::ggplot(data = dflsat[[i]], ggplot2::aes(x=as.Date(rownames(dflsat[[i]])))) + 
+  ggplot2::geom_line(ggplot2::aes(y=dflsat[[i]][,colnames(dflsat[[i]])[grepl("High",colnames(dflsat[[i]]))]], colour="Daily high")) +
+  ggplot2::geom_line(ggplot2::aes(y=dflsat[[i]][,colnames(dflsat[[i]])[grepl("Low",colnames(dflsat[[i]]))]], colour="Daily low")) +
+  ggplot2::scale_x_date(date_breaks  ="3 months") + 
+  ggplot2::geom_line(ggplot2::aes(y=mean(dflsat[[i]][,colnames(dflsat[[i]])[grepl("Low",colnames(dflsat[[i]]))]], na.rm = T)), col="red", linetype = "dashed") + 
+  ggplot2::geom_line(ggplot2::aes(y=mean(dflsat[[i]][,colnames(dflsat[[i]])[grepl("Low",colnames(dflsat[[i]]))]], na.rm = T)*2), col="darkgreen", linetype = "dashed") + 
+  ggplot2::labs(title=paste0("Stock acronym: " ,strsplit(colnames(dflsat[[i]])[grepl("Low",colnames(dflsat[[i]]))],"\\.")[[1]][1]), x="\nDate", y="Stock price\n") + 
+  ggplot2::theme_minimal()+ 
+  ggplot2::scale_colour_manual(name="Legend",values=cols)+
+  ggplot2::annotate(geom="text", x=as.Date("2026-01-31"), y=mean(dflsat[[i]][,colnames(dflsat[[i]])[grepl("Low",colnames(dflsat[[i]]))]], na.rm = T)*2,
+                    label="Defined threshold", col="darkgreen", size=3)+
+  ggplot2::annotate(geom="text", x=as.Date("2026-01-31"), y=mean(dflsat[[i]][,colnames(dflsat[[i]])[grepl("Low",colnames(dflsat[[i]]))]], na.rm = T),
+                    label="Average low", col="red", size=3))
+}
+```
+
+For all 9 stocks we can clearly see in the plots that our volatility criteria are satisfied!

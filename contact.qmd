@@ -1,0 +1,13 @@
+---
+title: "Contact"
+---
+
+![](docs/me.JPG)
+
+If you are curious about who is running this blog, my name is Anton Galich and I am a passionate Data Scientist happily living in Berlin (Germany). I have many different interests ranging from hiking and cycling to finance, history, politics, and various regions of the earth such as Northern and Eastern Europe and East and Southeast Asia. These interests will be reflected in the post and analyses on this blog.
+
+As I am always eager to hear feedback, suggestions for new issues to investigate in blog entries, to collaborate with others, or simply to find like-minded people, please reach out to me via ...
+
+-   Email: a.galich\@web.de
+
+-   [LinkedIn](https://linkedin.com/in/anton-galich-9b33b9134/)
